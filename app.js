@@ -22,7 +22,10 @@
     } catch (e) { /* fall through */ }
     return blank();
   }
-  function save() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+    catch (e) { toast('Phone storage for Mood Player is full. Remove a mood you don’t use.'); }
+  }
 
   // ---------- helpers ----------
   const $ = (id) => document.getElementById(id);
@@ -73,11 +76,16 @@
     return m;
   }
 
+  let addSeq = 0;
   function addReel(moodId, post) {
     const key = moodId + '|' + post.id;
-    if (state.reels[key]) return false;
+    const existing = state.reels[key];
+    if (existing) {
+      if (post.caption && !existing.caption) existing.caption = post.caption;
+      return false;
+    }
     state.reels[key] = { key, mood: moodId, id: post.id, type: post.type, score: 0, plays: 0,
-      lastPlayed: 0, note: '', added: Date.now() };
+      lastPlayed: 0, note: '', caption: post.caption || '', added: Date.now() + (addSeq++) / 1000 };
     return true;
   }
 
@@ -193,6 +201,8 @@
     $('reelPos').textContent = `Reel ${idx} of ${all.length}`;
     $('reelScore').textContent = r.plays === 0 ? 'new' : r.score > 0 ? `🔥 ${r.score}` : `score ${r.score}`;
     $('noteInput').value = r.note || '';
+    $('reelCaption').textContent = r.caption || '';
+    $('reelCaption').hidden = !r.caption;
     $('watchBtn').textContent = state.current.opened ? '▶ Watch again' : '▶ Watch in Instagram';
   }
 
@@ -267,45 +277,91 @@
       </div>`).join('') : '<p class="small">No moods yet. Import from Instagram or add one below.</p>';
   }
 
-  // Instagram's export layout changes from time to time, so this walks it loosely:
-  // a "collection" entry sets the current collection, and every reel link after it belongs to it.
-  function importInstagram(text) {
+  // Instagram stores text as UTF-8 bytes written out as single characters ("Indiað®ð³").
+  // This turns it back into normal text and emoji.
+  function fixText(s) {
+    if (typeof s !== 'string' || !/[\u0080-ÿ]/.test(s)) return s;
+    for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) > 255) return s;
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(s, (c) => c.charCodeAt(0)));
+    } catch (e) { return s; }
+  }
+
+  // Finds saved items shaped like { dict: [ {label:"URL", href}, {label:"Caption", value}, ... ] }.
+  function findItems(node, out = []) {
+    if (Array.isArray(node)) { node.forEach((n) => findItems(n, out)); return out; }
+    if (!node || typeof node !== 'object') return out;
+    if (Array.isArray(node.dict)) {
+      const urlField = node.dict.find((x) => x && /^url$/i.test(x.label || '') && (x.href || x.value));
+      if (urlField) {
+        const cap = node.dict.find((x) => x && /caption/i.test(x.label || '') && typeof x.value === 'string');
+        out.push({ url: urlField.href || urlField.value, caption: cap ? fixText(cap.value).trim().slice(0, 220) : '' });
+        return out;
+      }
+    }
+    Object.values(node).forEach((v) => findItems(v, out));
+    return out;
+  }
+
+  function labelName(e) {
+    if (!e || !Array.isArray(e.label_values)) return null;
+    const lv = e.label_values.find((x) => x && /^(name|collection name)$/i.test(x.label || '') && typeof x.value === 'string' && !x.href);
+    return lv ? fixText(lv.value).trim() : null;
+  }
+
+  // Reads an Instagram export file and returns [{ name, posts }] per collection (nothing saved yet).
+  // Handles the current layout (each collection holds its items) and the older flat layout
+  // (a "Collection" header row followed by its items).
+  function parseExport(text) {
     let json = null;
     try { json = JSON.parse(text); } catch (e) { /* maybe HTML */ }
-    const found = new Map(); // collection name -> posts
-
-    const push = (name, posts) => {
-      if (!posts.length) return;
-      const k = name || 'Saved';
-      if (!found.has(k)) found.set(k, []);
-      found.get(k).push(...posts);
+    const found = new Map(); // name -> Map(id -> post)
+    const add = (name, post) => {
+      const k = (name || 'Saved').trim() || 'Saved';
+      if (!found.has(k)) found.set(k, new Map());
+      const m = found.get(k);
+      if (!m.has(post.id)) m.set(post.id, post);
     };
 
     if (json) {
       const entries = firstArray(json) || [];
       let current = null;
       for (const e of entries) {
+        const name = labelName(e);
+        const items = findItems(e);
+        if (items.length) {
+          const target = name || current;
+          for (const it of items) for (const p of extractPosts(it.url)) add(target, { ...p, caption: it.caption });
+          if (name) current = name;
+          continue;
+        }
         const posts = extractPosts(JSON.stringify(e));
         const header = headerName(e, posts.length);
         if (header) current = header;
-        push(current, posts);
+        posts.forEach((p) => add(current, p));
       }
-      if (!found.size) push('Saved', extractPosts(text));
+      if (!found.size) extractPosts(text).forEach((p) => add('Saved', p));
     } else {
-      push('Imported', extractPosts(text));
+      extractPosts(text).forEach((p) => add('Imported', p));
     }
+    return [...found].map(([name, m]) => ({ name, posts: [...m.values()] }))
+      .sort((a, b) => b.posts.length - a.posts.length);
+  }
 
+  function applyImport(groups, names) {
     let newReels = 0;
     const summary = [];
-    for (const [name, posts] of found) {
-      const m = ensureMood(name);
-      const n = posts.filter((p) => addReel(m.id, p)).length;
-      newReels += n;
-      summary.push(`${m.emoji} ${m.name}: ${posts.length}`);
+    for (const g of groups) {
+      if (names && !names.includes(g.name)) continue;
+      const m = ensureMood(g.name);
+      newReels += g.posts.filter((p) => addReel(m.id, p)).length;
+      summary.push(`${m.emoji} ${m.name}: ${g.posts.length}`);
     }
     save();
     return { newReels, summary };
   }
+
+  function importInstagram(text) { return applyImport(parseExport(text)); }
 
   function firstArray(o) {
     if (Array.isArray(o)) return o;
@@ -322,11 +378,11 @@
     const nameObj = smd.Name || smd['Collection name'] || smd.name;
     const isHeaderTitle = typeof e.title === 'string' && /collection/i.test(e.title);
     if (nameObj && typeof nameObj.value === 'string' && !nameObj.href && (isHeaderTitle || postCount === 0)) {
-      return nameObj.value;
+      return fixText(nameObj.value).trim();
     }
     if (Array.isArray(e.label_values)) {
       const lv = e.label_values.find((x) => x && /^(name|collection name|collection)$/i.test(x.label || '') && typeof x.value === 'string' && !x.href);
-      if (lv && (isHeaderTitle || postCount === 0 || /collection/i.test(lv.label))) return lv.value;
+      if (lv && (isHeaderTitle || postCount === 0 || /collection/i.test(lv.label))) return fixText(lv.value).trim();
     }
     if (isHeaderTitle && postCount === 0 && typeof e.value === 'string') return e.value;
     return null;
@@ -400,15 +456,36 @@
     ensureMood(name); save(); $('newMoodName').value = ''; renderSettings();
   };
 
+  // Step 1: read the file and show which collections were found, so the user picks which become moods.
+  let pendingGroups = null;
   $('importFile').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
+    $('importMsg').textContent = 'Reading your file…';
     const text = await f.text();
-    const { newReels, summary } = importInstagram(text);
     e.target.value = '';
-    $('importMsg').innerHTML = summary.length
-      ? `Found: ${summary.map(esc).join(' · ')}<br>${newReels} new reels added.`
-      : 'No reel links found in that file. Make sure it is <b>saved_collections.json</b>.';
-    renderSettings();
+    pendingGroups = parseExport(text);
+    if (!pendingGroups.length) {
+      $('importMsg').innerHTML = 'No reel links found in that file. Make sure it is <b>saved_collections.json</b>.';
+      return;
+    }
+    const known = new Set(state.moods.map((m) => m.name.toLowerCase()));
+    const preselect = (n) => known.has(n.toLowerCase()) || /confi|song|feel/i.test(n);
+    $('importMsg').innerHTML = `
+      <p>Found <b>${pendingGroups.length}</b> collections. Tick the ones you want as mood buttons:</p>
+      <div class="pick-list">${pendingGroups.map((g, i) => `
+        <label class="pick"><input type="checkbox" data-pick="${i}" ${preselect(g.name) ? 'checked' : ''}>
+          <span>${esc(guessEmoji(g.name))} ${esc(g.name)}</span><span class="n">${g.posts.length}</span></label>`).join('')}
+      </div>
+      <button class="primary" id="doImportBtn" style="width:100%;margin-top:10px">Import ticked collections</button>`;
+    $('doImportBtn').onclick = () => {
+      const names = [...document.querySelectorAll('[data-pick]:checked')].map((c) => pendingGroups[+c.dataset.pick].name);
+      if (!names.length) { toast('Tick at least one collection'); return; }
+      const { newReels, summary } = applyImport(pendingGroups, names);
+      pendingGroups = null;
+      $('importMsg').innerHTML = `✅ Imported: ${summary.map(esc).join(' · ')}<br>${newReels} new reels added.`;
+      renderSettings();
+      toast(`${newReels} reels added`);
+    };
   };
 
   $('exportBtn').onclick = () => {
@@ -442,5 +519,5 @@
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
   // test hook (harmless in production)
-  window.__moodPlayer = { importInstagram, pickNext, get state() { return state; } };
+  window.__moodPlayer = { importInstagram, parseExport, pickNext, get state() { return state; } };
 })();

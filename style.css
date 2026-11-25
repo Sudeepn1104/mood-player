@@ -58,6 +58,14 @@ button:active { transform: scale(.98); }
 .reel-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: .9rem; }
 .badge { background: var(--card2); padding: 2px 10px; border-radius: 999px; }
 .big-emoji { font-size: 4rem; margin: 10px 0 14px; }
+.caption { text-align: left; color: var(--muted); font-size: .92rem; white-space: pre-line; margin: 0 0 14px; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.pick-list { max-height: 50vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; padding: 4px 10px; }
+.pick { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--text); }
+.pick:last-child { border-bottom: 0; }
+.pick input { width: 20px; height: 20px; }
+.pick span:first-of-type { flex: 1; }
+.pick .n { color: var(--muted); font-size: .85rem; }
 .rate-panel { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .rate-panel p { margin: 0 0 10px; }
 .rate-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
