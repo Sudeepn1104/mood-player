@@ -456,13 +456,73 @@
     ensureMood(name); save(); $('newMoodName').value = ''; renderSettings();
   };
 
+  // Accepts either Instagram's downloaded .zip (finds saved_collections.json inside it) or the .json itself.
+  async function readImportFile(f) {
+    const head = new Uint8Array(await f.slice(0, 4).arrayBuffer());
+    const isZip = head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04;
+    if (isZip) {
+      const files = await readZip(await f.arrayBuffer());
+      const hit = files.find((z) => /(^|\/)saved_collections\.json$/i.test(z.name));
+      if (!hit) {
+        throw new Error(files.some((z) => /saved_collections\.html$/i.test(z.name))
+          ? 'This download is in HTML format. Request it again in Instagram with Format: JSON.'
+          : 'This zip has no saved_collections.json. When requesting the download, tick “Saved”.');
+      }
+      return hit.read();
+    }
+    if (/saved_(posts|music)\.json$/i.test(f.name)) {
+      throw new Error(`${f.name} doesn't contain your collections. Pick saved_collections.json, or just pick the whole Instagram .zip.`);
+    }
+    return f.text();
+  }
+
+  // Minimal zip reader (stored + deflate), using the browser's built-in decompression.
+  async function readZip(buf) {
+    const dv = new DataView(buf);
+    let eocd = -1;
+    for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('That zip file looks damaged. Try downloading it from Instagram again.');
+    const count = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const dec = new TextDecoder();
+    const out = [];
+    for (let n = 0; n < count && dv.getUint32(p, true) === 0x02014b50; n++) {
+      const method = dv.getUint16(p + 10, true);
+      const size = dv.getUint32(p + 20, true);
+      const nameLen = dv.getUint16(p + 28, true);
+      const extraLen = dv.getUint16(p + 30, true);
+      const commentLen = dv.getUint16(p + 32, true);
+      const local = dv.getUint32(p + 42, true);
+      const name = dec.decode(new Uint8Array(buf, p + 46, nameLen));
+      p += 46 + nameLen + extraLen + commentLen;
+      const read = async () => {
+        const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+        const data = new Blob([new Uint8Array(buf, start, size)]);
+        if (method === 0) return data.text();
+        if (method === 8) return new Response(data.stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+        throw new Error('This zip uses a format Mood Player can’t open. Extract it and pick saved_collections.json.');
+      };
+      out.push({ name, read });
+    }
+    return out;
+  }
+
   // Step 1: read the file and show which collections were found, so the user picks which become moods.
   let pendingGroups = null;
   $('importFile').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
     $('importMsg').textContent = 'Reading your file…';
-    const text = (await f.text()).replace(/^﻿/, '');
     e.target.value = '';
+    let text;
+    try {
+      text = await readImportFile(f);
+    } catch (err) {
+      $('importMsg').innerHTML = `⚠ ${esc(err.message)}`;
+      return;
+    }
+    text = text.replace(/^﻿/, '');
     let isJson = true;
     try { JSON.parse(text); } catch (err) { isJson = false; }
     if (!isJson) {

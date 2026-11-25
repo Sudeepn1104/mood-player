@@ -31,7 +31,7 @@ Reels open in the Instagram app. Your list and ratings stay only on your phone.
 1. Instagram → profile → ☰ → **Accounts Center** → **Your information and permissions** → **Download your information**.
 2. **Some of your information** → tick **Saved** → **Download to device** → Format **JSON**, Date range **All time** → **Create files**.
 3. Instagram emails you when it's ready (minutes to a couple of days). Download the zip, then in the **Files** app tap it → **Extract**.
-4. Mood Player → ⚙ → **Choose saved_collections.json** (inside `your_instagram_activity/saved/`).
+4. Mood Player → ⚙ → **Choose Instagram download (.zip)** → pick the zip (no need to extract it).
 
 Your collections appear as mood buttons. You can rename them or change their emoji in ⚙.
 

@@ -1,5 +1,5 @@
 ﻿// Caches the app itself so it opens instantly (and the saved-lines wall works offline).
-const CACHE = 'moodplayer-v5';
+const CACHE = 'moodplayer-v6';
 const FILES = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png'];
 
