@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1b1430">
+  <title>Mood Player</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <button class="icon-btn" id="backBtn" hidden aria-label="Back">←</button>
+    <h1 id="title">Mood Player</h1>
+    <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙</button>
+  </header>
+
+  <main>
+    <!-- HOME -->
+    <section id="home" class="screen">
+      <p class="hint" id="homeHint">How are you feeling right now?</p>
+      <div id="moodList" class="mood-list"></div>
+      <div id="emptyState" class="card empty" hidden>
+        <h2>Let's add your reels</h2>
+        <p>Import your Instagram saved collections once, and your reels show up here sorted into moods.</p>
+        <button class="primary" data-go="settings">Import from Instagram</button>
+        <p class="small">Or share any reel from Instagram to <b>Mood Player</b> to add it.</p>
+      </div>
+    </section>
+
+    <!-- PLAYER -->
+    <section id="player" class="screen" hidden>
+      <div class="card reel-card">
+        <div class="reel-meta">
+          <span id="reelPos"></span>
+          <span id="reelScore" class="badge"></span>
+        </div>
+        <div class="big-emoji" id="playerEmoji"></div>
+        <button class="primary huge" id="watchBtn">▶ Watch in Instagram</button>
+        <p class="small center" id="watchHint">Watch it, then come back here and rate it.</p>
+
+        <div id="ratePanel" class="rate-panel">
+          <p class="center">Did this one help?</p>
+          <div class="rate-row">
+            <button class="rate fire" data-rate="fire">🔥<span>Helped a lot</span></button>
+            <button class="rate ok" data-rate="ok">👍<span>Okay</span></button>
+            <button class="rate skip" data-rate="skip">⏭<span>Skip</span></button>
+          </div>
+        </div>
+
+        <details class="note-box">
+          <summary>✍ Save a line from this reel</summary>
+          <textarea id="noteInput" rows="2" placeholder="e.g. Nobody else decides my worth / song name"></textarea>
+          <button class="secondary" id="saveNoteBtn">Save line</button>
+        </details>
+      </div>
+      <div class="row-btns">
+        <button class="secondary" id="wallBtn">📜 Saved lines</button>
+        <button class="danger-link" id="removeReelBtn">Remove this reel</button>
+      </div>
+    </section>
+
+    <!-- QUOTE WALL -->
+    <section id="wall" class="screen" hidden>
+      <p class="hint">Lines you saved. These work without internet.</p>
+      <div id="wallList"></div>
+    </section>
+
+    <!-- ADD (from share or paste) -->
+    <section id="add" class="screen" hidden>
+      <div class="card">
+        <h2>Add a reel</h2>
+        <input id="addUrl" type="url" placeholder="Paste Instagram reel link">
+        <p class="small" id="addMsg"></p>
+        <p>Add to which mood?</p>
+        <div id="addMoods" class="chip-list"></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="settings" class="screen" hidden>
+      <div class="card">
+        <h2>1. Import from Instagram</h2>
+        <ol class="steps">
+          <li>Instagram → your profile → ☰ → <b>Accounts Center</b> → <b>Your information and permissions</b> → <b>Download your information</b>.</li>
+          <li>Choose <b>Some of your information</b> → tick <b>Saved</b> → <b>Download to device</b>, Format <b>JSON</b>, Date range <b>All time</b>.</li>
+          <li>When Instagram emails you, download the zip and extract it (Files app → tap zip → Extract).</li>
+          <li>Pick the file <b>saved_collections.json</b> below (it's in <i>your_instagram_activity/saved</i>).</li>
+        </ol>
+        <label class="file-btn primary">
+          Choose saved_collections.json
+          <input type="file" id="importFile" accept=".json,application/json,.html,text/html" hidden>
+        </label>
+        <p class="small" id="importMsg"></p>
+      </div>
+
+      <div class="card">
+        <h2>2. Your moods</h2>
+        <div id="moodAdmin"></div>
+        <div class="inline">
+          <input id="newMoodName" placeholder="New mood name">
+          <button class="secondary" id="addMoodBtn">Add</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Add one reel by link</h2>
+        <button class="secondary" data-go="add">Paste a link</button>
+      </div>
+
+      <div class="card">
+        <h2>Backup</h2>
+        <p class="small">Your reels and ratings are stored only on this phone. Save a backup now and then.</p>
+        <div class="row-btns">
+          <button class="secondary" id="exportBtn">Save backup</button>
+          <label class="file-btn secondary">Restore backup
+            <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+          </label>
+        </div>
+        <p class="small" id="backupMsg"></p>
+      </div>
+
+      <div class="card">
+        <h2>Options</h2>
+        <label class="switch"><input type="checkbox" id="autoNext"> After rating, open the next reel automatically</label>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
