@@ -516,7 +516,16 @@
   window.addEventListener('hashchange', route);
   route();
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Check for a new version each time the app opens; reload once when it has been installed.
+  if ('serviceWorker' in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then((reg) => reg.update()).catch(() => {});
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController && !reloaded) { reloaded = true; location.reload(); }
+    });
+  }
 
   // test hook (harmless in production)
   window.__moodPlayer = { importInstagram, parseExport, pickNext, get state() { return state; } };
