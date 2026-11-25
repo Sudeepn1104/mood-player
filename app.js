@@ -461,8 +461,16 @@
   $('importFile').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
     $('importMsg').textContent = 'Reading your file…';
-    const text = await f.text();
+    const text = (await f.text()).replace(/^﻿/, '');
     e.target.value = '';
+    let isJson = true;
+    try { JSON.parse(text); } catch (err) { isJson = false; }
+    if (!isJson) {
+      $('importMsg').innerHTML = `⚠ <b>${esc(f.name)}</b> is not the JSON file, so collections can't be separated.<br>
+        Pick <b>saved_collections.json</b> (inside <i>your_instagram_activity → saved</i>). If you only have .html files,
+        your Instagram download was made in HTML format: request it again with <b>Format: JSON</b>.`;
+      return;
+    }
     pendingGroups = parseExport(text);
     if (!pendingGroups.length) {
       $('importMsg').innerHTML = 'No reel links found in that file. Make sure it is <b>saved_collections.json</b>.';
